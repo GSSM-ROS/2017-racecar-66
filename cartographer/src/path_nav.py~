@@ -1,0 +1,111 @@
+#! /usr/bin/env python
+
+'''
+Potential field attraction to detected path and endpoint
+'''
+
+import rospy
+from geometry_msgs.msg import Pose, Point, PoseArray, PoseWithCovarianceStamped
+from nav_msgs.msg import MapMetaData
+import math
+import sys
+
+class Potential_Path:
+    def __init__(self):
+        '''
+        Creates Potential_Path object and begins spinning, waiting for pose arrays
+        '''
+        rospy.init_node('potential_path', anonymous=False)
+        rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, callback=self.pose_sub)
+        rospy.Subscriber('/path', PoseArray, callback=self.update_path)
+        rospy.Subscriber('/map_metadata', MapMetaData, callback=self.update_origin_offset)
+        self.pub = rospy.Publisher('/path_sum', Point, queue_size=5) #x and y magnitudes of pull
+
+        try:
+            self.path = get_path("path.csv")
+        except Exception as e:
+            self.path = []
+            print("Error: unable to read path file")
+            print("Stacktrace: %s" % e)
+        #self.path = [(30, 40), (50, 0)] #TODO remove
+        self.path_charge = 1
+        self.endpoint_charge = 100
+        
+        rospy.spin()
+    
+    def update_origin_offset(self, msg):
+        '''
+        Updates origin offset data
+        '''
+        self.resolution = msg.resolution
+        position = msg.origin.position
+        self.offset_x = position.x
+        self.offset_y = position.y
+
+    def pose_sub(self, msg):
+        '''
+        Calculates "Coulomb Force" between robot and path + endpoint then publishes to /path_sum
+        :param msg: Pose message from /amcl_pose
+        '''
+        robo_pos = msg.pose.pose.position
+        robo_x = robo_pos.x
+        robo_y = robo_pos.y
+        
+        sum_x = 0
+        sum_y = 0
+        
+        #add force for each point in path
+        for path_point in self.path[:-1]:
+            x, y = path_point
+            f_x, f_y = force(self.path_charge, x-robo_x, y-robo_y)
+            sum_x += f_x
+            sum_y += f_y
+        
+        #add force of endpoint
+        if len(self.path) > 0:
+            end_x, end_y = self.path[-1]
+            f_x_end, f_y_end = force(self.endpoint_charge, end_x-robo_x, end_y-robo_y)
+            sum_x += f_x_end
+            sum_y += f_y_end
+            
+        #package force as Point message
+        force_sum = Point()
+        force_sum.x = sum_x
+        force_sum.y = sum_y
+        self.pub.publish(force_sum)
+    
+    def update_path(self, msg):
+        new_path = []
+        for pose in msg.poses:
+            point = pose.position
+            x = int(point.x)
+            y = int(point.y)
+            new_path.append((x,y))
+        self.path = new_path
+
+def force(Q, dx, dy, q=1, k=1):
+    '''
+    Calculates associated force
+    :return: returns F_x, F_x
+    '''
+    r = math.sqrt(dx**2 + dy**2)
+    total_force_asterisk = k * Q * q / r**3 #total force but divided by r to make life easier later
+    return total_force_asterisk * dx, total_force_asterisk * dy
+
+def get_path(filename):
+    '''
+    Gets file directly from beside where it is
+    '''
+    path = []
+    fp = open(filename, "r")
+    for line in fp:
+        print(line)
+        x_str, y_str = line.split(',')
+        x = int(int(x_str) * self.resolution + self.offset_x)
+        y = int(int(y_str) * self.resolution + self.offset_y)
+        path.append((x,y))
+        print(x,y) #TODO remove
+    fp.close()
+    return path
+
+Potential_Path()

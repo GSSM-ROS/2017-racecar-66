@@ -1,0 +1,12 @@
+<launch> 
+	<include file="$(find racecar)/launch/teleop.launch"/>
+	<include file="$(find racecar)/launch/known_map_localization.launch"/>
+
+	<arg name="wall_point" default="0.008" /> <param name="wall_point" value="$(arg wall_point)"    />
+	<arg name="path_point" default="1"     /> <param name="path_point" value="$(arg path_point)"    />
+	<arg name="goal_point" default="100"   /> <param name="goal_point" value="$(arg goal_point)"    />
+
+	<!--node name="wall_navigation"    pkg="cartographer" type="wall_nav.py" args="" output="screen"   /-->
+	<node name="path_navigation"    pkg="cartographer" type="path_nav.py" args="" output="screen"   />
+	<node name="navigation_manager" pkg="cartographer" type="nav_man.py"  args="" output="screen"   />
+</launch>
